@@ -10,4 +10,10 @@ sha2 = "0.10"
 hmac = "0.12"
 
 [dev-dependencies]
+criterion = "0.7"
 hex-literal = "1.1"
+rcgen = "0.14"
+
+[[bench]]
+name = "ciphers"
+harness = false
