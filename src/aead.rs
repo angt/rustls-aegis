@@ -5,16 +5,16 @@ use rustls::crypto::cipher::{
     UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::{ConnectionTrafficSecrets, ContentType, Error, ProtocolVersion};
-use aegis::aegis128l::{self, Key, Nonce, Tag};
+use aegis::aegis128x4::{self, Key, Nonce, Tag};
 
 const KEY_LEN: usize = 16;
 const NONCE_LEN: usize = 16;
 const TAG_LEN: usize = 16;
 const IV_LEN: usize = 12;
 
-pub(crate) struct Aegis128L;
+pub(crate) struct Aegis128X4;
 
-impl Tls13AeadAlgorithm for Aegis128L {
+impl Tls13AeadAlgorithm for Aegis128X4 {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
         let mut aegis_key = [0u8; KEY_LEN];
         aegis_key.copy_from_slice(key.as_ref());
@@ -83,7 +83,7 @@ impl MessageEncrypter for Tls13AegisCipher {
         let nonce = self.make_nonce(seq);
         let ad = make_tls13_aad(total_len);
 
-        let cipher = aegis128l::Aegis128L::<TAG_LEN>::new(&self.key, &nonce);
+        let cipher = aegis128x4::Aegis128X4::<TAG_LEN>::new(&self.key, &nonce);
         let tag = cipher.encrypt_in_place(payload.as_mut(), &ad);
 
         payload.extend_from_slice(&tag);
@@ -122,7 +122,7 @@ impl MessageDecrypter for Tls13AegisCipher {
         let nonce = self.make_nonce(seq);
         let ad = make_tls13_aad(total_len);
 
-        let cipher = aegis128l::Aegis128L::<TAG_LEN>::new(&self.key, &nonce);
+        let cipher = aegis128x4::Aegis128X4::<TAG_LEN>::new(&self.key, &nonce);
 
         let ct = &mut buf[..payload_len];
         cipher
@@ -137,10 +137,10 @@ impl MessageDecrypter for Tls13AegisCipher {
 
 #[cfg(test)]
 mod tests {
-    use aegis::aegis128l::{self, Key, Nonce, Tag};
+    use aegis::aegis128x4::{self, Key, Nonce, Tag};
     use hex_literal::hex;
 
-    fn run_aegis128l_vector(
+    fn run_aegis128x4_vector(
         key: &[u8],
         nonce: &[u8],
         plaintext: &[u8],
@@ -151,7 +151,7 @@ mod tests {
         let key: Key = key.try_into().expect("bad key");
         let nonce: Nonce = nonce.try_into().expect("bad nonce");
 
-        let cipher = aegis128l::Aegis128L::<16>::new(&key, &nonce);
+        let cipher = aegis128x4::Aegis128X4::<16>::new(&key, &nonce);
         let mut ciphertext = plaintext.to_vec();
 
         let tag: Tag<16> = cipher.encrypt_in_place(&mut ciphertext, ad).into();
@@ -160,7 +160,7 @@ mod tests {
         assert_eq!(ciphertext, expected_ciphertext);
         assert_eq!(tag, expected_tag);
 
-        let cipher = aegis128l::Aegis128L::<16>::new(&key, &nonce);
+        let cipher = aegis128x4::Aegis128X4::<16>::new(&key, &nonce);
         cipher.decrypt_in_place(&mut ciphertext, &tag, ad).unwrap();
 
         assert_eq!(ciphertext, plaintext);
@@ -168,31 +168,21 @@ mod tests {
 
     #[test]
     fn test_vectors() {
-        run_aegis128l_vector(
-            &hex!("10010000000000000000000000000000"),
-            &hex!("10000200000000000000000000000000"),
-            &hex!("00000000000000000000000000000000"),
-            &hex!("c1c0e58bd913006feba00f4b3cc3594e"),
-            &hex!("abe0ece80c24868a226a35d16bdae37a"),
-            &[],
+        run_aegis128x4_vector(
+            &hex!("000102030405060708090a0b0c0d0e0f"),
+            &hex!("101112131415161718191a1b1c1d1e1f"),
+            &hex!(""),
+            &hex!(""),
+            &hex!("5bef762d0947c00455b97bb3af30dfa3"),
+            &hex!(""),
         );
-
-        run_aegis128l_vector(
-            &hex!("10010000000000000000000000000000"),
-            &hex!("10000200000000000000000000000000"),
-            &hex!("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
-            &hex!("79d94593d8c2119d7e8fd9b8fc77845c5c077a05b2528b6ac54b563aed8efe84"),
-            &hex!("cc6f3372f6aa1bb82388d695c3962d9a"),
-            &hex!("0001020304050607"),
-        );
-
-        run_aegis128l_vector(
-            &hex!("10010000000000000000000000000000"),
-            &hex!("10000200000000000000000000000000"),
-            &hex!("101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637"),
-            &hex!("b31052ad1cca4e291abcf2df3502e6bdb1bfd6db36798be3607b1f94d34478aa7ede7f7a990fec10"),
-            &hex!("7542a745733014f9474417b337399507"),
-            &hex!("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526272829"),
+        run_aegis128x4_vector(
+            &hex!("000102030405060708090a0b0c0d0e0f"),
+            &hex!("101112131415161718191a1b1c1d1e1f"),
+            &hex!("040506070405060704050607040506070405060704050607040506070405060704050607040506070405060704050607040506070405060704050607040506070405060704050607040506070405060704050607040506070405060704050607040506070405060704050607040506070405060704050607"),
+            &hex!("e836118562f4479c9d35c17356a833114c21f9aa39e4dda5e5c87f4152a00fce9a7c38f832eafe8b1c12f8a7cf12a81a1ad8a9c24ba9dedfbdaa586ffea67ddc801ea97d9ab4a872f42d0e352e2713dacd609f9442c17517c5a29daf3e2a3fac4ff6b1380c4e46df7b086af6ce6bc1ed594b8dd64aed2a7e"),
+            &hex!("0e56ab94e2e85db80f9d54010caabfb4"),
+            &hex!("0102030401020304"),
         );
     }
 }
