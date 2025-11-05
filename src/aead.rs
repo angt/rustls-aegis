@@ -64,15 +64,11 @@ macro_rules! aegis_mod {
             impl Tls13AegisCipher {
                 #[inline(always)]
                 fn make_nonce(&self, seq: u64) -> Nonce {
-                    let mut nonce16 = [0u8; NONCE_LEN];
-                    nonce16[4..4 + IV_LEN].copy_from_slice(self.iv.as_ref());
-
-                    let mut tail = u64::from_be_bytes(nonce16[8..16].try_into().unwrap());
-                    tail ^= seq;
-
-                    nonce16[8..16].copy_from_slice(&tail.to_be_bytes());
-
-                    Nonce::from(nonce16)
+                    let mut nonce = [0u8; NONCE_LEN];
+                    nonce[NONCE_LEN - IV_LEN..].copy_from_slice(self.iv.as_ref());
+                    let tail = seq ^ u64::from_be_bytes(nonce[8..].try_into().unwrap());
+                    nonce[8..].copy_from_slice(&tail.to_be_bytes());
+                    Nonce::from(nonce)
                 }
             }
 
@@ -86,13 +82,12 @@ macro_rules! aegis_mod {
                     let inner_len = payload_len + 1;
                     let total_len = inner_len + TAG_LEN;
 
-                    let mut payload = PrefixedPayload::with_capacity(total_len + TAG_LEN);
+                    let mut payload = PrefixedPayload::with_capacity(total_len);
                     payload.extend_from_chunks(&m.payload);
                     payload.extend_from_slice(&[u8::from(m.typ)]);
 
                     let nonce = self.make_nonce(seq);
                     let ad = make_tls13_aad(total_len);
-
                     let cipher = <$aegis_cipher>::new(&self.key, &nonce);
                     let tag = cipher.encrypt_in_place(payload.as_mut(), &ad);
 
@@ -116,31 +111,22 @@ macro_rules! aegis_mod {
                     mut m: InboundOpaqueMessage<'a>,
                     seq: u64,
                 ) -> Result<InboundPlainMessage<'a>, Error> {
-                    let buf: &mut [u8] = &mut *m.payload;
-                    let total_len = buf.len();
-
+                    let total_len = m.payload.len();
                     if total_len < TAG_LEN + 1 {
                         return Err(Error::DecryptError);
                     }
-
                     let payload_len = total_len - TAG_LEN;
-                    let tag_start = payload_len;
-                    let mut tag_arr = [0u8; TAG_LEN];
-                    tag_arr.copy_from_slice(&buf[tag_start..tag_start + TAG_LEN]);
-                    let tag = Tag::from(tag_arr);
-
+                    let (ct, tag) = m.payload.split_at_mut(payload_len);
+                    let tag = Tag::try_from(tag).unwrap();
                     let nonce = self.make_nonce(seq);
                     let ad = make_tls13_aad(total_len);
-
                     let cipher = <$aegis_cipher>::new(&self.key, &nonce);
 
-                    let ct = &mut buf[..payload_len];
                     cipher
                         .decrypt_in_place(ct, &tag, &ad)
                         .map_err(|_| Error::DecryptError)?;
 
                     m.payload.truncate(payload_len);
-
                     m.into_tls13_unpadded_message()
                 }
             }
