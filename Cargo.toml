@@ -3,17 +3,28 @@ name = "rustls-aegis"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["aws-lc-rs"]
+aws-lc-rs = ["rustls/aws-lc-rs"]
+ring = ["rustls/ring"]
+
 [dependencies]
-rustls = "0.23.34"
+rustls = { git = "https://github.com/rustls/rustls", rev = "d7675e3c09eb5d7b8553406750e3954fc8fd9fee", default-features = false, features = ["std"] }
 aegis = "0.9"
 sha2 = "0.10"
 hmac = "0.12"
+webpki-roots = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+url = "2.5"
 
 [dev-dependencies]
 criterion = "0.7"
-hex-literal = "1.1"
 rcgen = "0.14"
 
 [[bench]]
 name = "ciphers"
 harness = false
+
+[[bin]]
+name = "client"
+path = "src/client.rs"

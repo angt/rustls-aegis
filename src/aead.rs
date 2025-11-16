@@ -1,15 +1,15 @@
 use rustls::crypto::cipher::{
-    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv,
-    MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage,
-    OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm,
+    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
+    OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm,
     UnsupportedOperationError, make_tls13_aad,
 };
-use rustls::{ConnectionTrafficSecrets, ContentType, Error, ProtocolVersion};
+use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::{ConnectionTrafficSecrets, Error};
 
 const KEY_LEN: usize = 16;
 const NONCE_LEN: usize = 16;
 const TAG_LEN: usize = 16;
-const IV_LEN: usize = 12;
+const IV_LEN: usize = 16;
 
 macro_rules! aegis_mod {
     (
@@ -45,6 +45,10 @@ macro_rules! aegis_mod {
 
                 fn key_len(&self) -> usize {
                     KEY_LEN
+                }
+
+                fn iv_len(&self) -> usize {
+                    IV_LEN
                 }
 
                 fn extract_keys(
@@ -93,11 +97,11 @@ macro_rules! aegis_mod {
 
                     payload.extend_from_slice(&tag);
 
-                    Ok(OutboundOpaqueMessage::new(
-                            ContentType::ApplicationData,
-                            ProtocolVersion::TLSv1_2,
-                            payload,
-                    ))
+                    Ok(OutboundOpaqueMessage {
+                        typ: ContentType::ApplicationData,
+                        version: ProtocolVersion::TLSv1_2,
+                        payload,
+                    })
                 }
 
                 fn encrypted_payload_len(&self, payload_len: usize) -> usize {
